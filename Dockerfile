@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci && npx prisma generate
+RUN npm install --no-audit --no-fund && npx prisma generate
 
 FROM base AS builder
 ENV AUTH_SECRET="aiforge-cloudrun-prod-auth-secret-9f4e2a8c1b7d3e6f5a0c9b8d7e6f5a4b"
