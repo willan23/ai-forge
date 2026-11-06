@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 
 const CONTROL_LINKS = [
   { href: '/', label: 'Overview', badge: '5s Trust' },
@@ -91,16 +94,26 @@ export function Sidebar({ pathname = '/' }: { pathname?: string }) {
       </div>
 
       <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Link
-          href="/login"
-          className={`btn btn-secondary btn-sm ${pathname === '/login' ? 'active' : ''}`}
-          style={{ justifyContent: 'space-between' }}
-        >
-          <span>Login</span>
-          <span className="mono" style={{ fontSize: 10 }}>
-            RBAC · OIDC
-          </span>
-        </Link>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Link
+            href="/login"
+            className={`btn btn-secondary btn-sm ${pathname === '/login' ? 'active' : ''}`}
+            style={{ flex: 1, justifyContent: 'space-between' }}
+          >
+            <span>Login / Registo</span>
+            <span className="mono" style={{ fontSize: 10 }}>
+              SaaS · RBAC
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            title="Terminar sessão ativa"
+            onClick={() => signOut({ callbackUrl: '/login' })}
+          >
+            Sair
+          </button>
+        </div>
         <div
           style={{
             display: 'flex',

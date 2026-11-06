@@ -14,9 +14,9 @@ function LoginForm() {
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
-  // Login state
-  const [email, setEmail] = useState('admin@demo.local');
-  const [password, setPassword] = useState('demo-admin');
+  // Login state (clean production fields — no pre-filled demo credentials)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(
     authError ? 'Credenciais inválidas ou sessão expirada.' : null
@@ -146,11 +146,12 @@ function LoginForm() {
 
             <form className="login-form" onSubmit={onSubmit}>
               <label className="field">
-                <span>Email</span>
+                <span>Email Corporativo</span>
                 <input
                   type="email"
                   name="email"
                   autoComplete="username"
+                  placeholder="nome@empresa.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -162,6 +163,7 @@ function LoginForm() {
                   type="password"
                   name="password"
                   autoComplete="current-password"
+                  placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -175,14 +177,15 @@ function LoginForm() {
               ) : null}
 
               <button className="btn btn-primary" type="submit" disabled={submitting}>
-                {submitting ? 'A entrar…' : 'Entrar'}
+                {submitting ? 'A autenticar…' : 'Entrar'}
               </button>
             </form>
 
             <div className="login-hints mono" style={{ marginTop: 20 }}>
-              <div>admin@demo.local / demo-admin</div>
-              <div>operator@demo.local / demo-operator</div>
-              <div style={{ marginTop: 10, color: 'var(--text-secondary)' }}>{oidcHint}</div>
+              <div style={{ color: 'var(--trust)' }}>
+                ● KDF scrypt (N=16384) + CSPRNG 16-Byte Salt · HttpOnly / SameSite=Lax
+              </div>
+              <div style={{ marginTop: 6, color: 'var(--text-secondary)' }}>{oidcHint}</div>
             </div>
           </>
         ) : (

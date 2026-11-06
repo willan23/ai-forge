@@ -49,6 +49,20 @@ const DEMO_USERS: Record<
     organizationId: string;
   }
 > = {
+  'ciso@wgf.security': {
+    passwordHashHex: hashPasswordScrypt('WgfSec!2026'),
+    id: 'user_admin_demo',
+    name: 'Enterprise CISO (Admin)',
+    role: 'admin',
+    organizationId: 'org_demo_wgf',
+  },
+  'secops@wgf.security': {
+    passwordHashHex: hashPasswordScrypt('WgfOps!2026'),
+    id: 'user_operator_demo',
+    name: 'SecOps Lead (Operator)',
+    role: 'operator',
+    organizationId: 'org_demo_wgf',
+  },
   'admin@demo.local': {
     passwordHashHex: hashPasswordScrypt('demo-admin'),
     id: 'user_admin_demo',
