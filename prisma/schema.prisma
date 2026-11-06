@@ -1,0 +1,354 @@
+// AI Forge — Prisma Schema
+// 14 core entities with referential integrity, composite indexes, and immutability constraints
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Organization & Workspace ────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("community")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaces       Workspace[]
+  auditLogs        AuditLog[]
+  approvalRequests ApprovalRequest[]
+
+  @@index([slug])
+}
+
+model Workspace {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  environment    String   @default("development") // development | staging | production
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agents              Agent[]
+  capabilityContracts CapabilityContract[]
+  policyBundles       PolicyBundle[]
+  evaluationSuites    EvaluationSuite[]
+
+  @@unique([organizationId, name, environment])
+  @@index([organizationId, createdAt])
+}
+
+// ─── Agent Registry ──────────────────────────────────────────────────────────
+
+model Agent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  slug        String
+  name        String
+  ownerId     String
+  status      String   @default("active") // active | archived | suspended
+  killSwitch  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  branches        AgentBranch[]
+  releases        AgentRelease[]
+  changeProposals ChangeProposal[]
+  runs            Run[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, createdAt])
+  @@index([status])
+}
+
+model AgentBranch {
+  id             String   @id @default(cuid())
+  agentId        String
+  name           String
+  headCommitId   String?
+  protected      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agent    Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  commits  AgentCommit[]
+
+  @@unique([agentId, name])
+}
+
+// Immutable after creation
+model AgentCommit {
+  id             String   @id @default(cuid())
+  branchId       String
+  parentCommitId String?
+  manifestJson   Json     // The full agent manifest — NEVER update after creation
+  message        String
+  authorId       String
+  digest         String   // sha256 of canonical manifest JSON
+  createdAt      DateTime @default(now())
+
+  branch   AgentBranch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  releases AgentRelease[]
+
+  @@index([digest])
+  @@index([branchId, createdAt])
+}
+
+// Immutable after signing
+model AgentRelease {
+  id                 String   @id @default(cuid())
+  agentId            String
+  commitId           String
+  version            String
+  releaseDigest      String   @unique // sha256 of canonical lockfile
+  status             String   @default("draft") // draft | candidate | published | revoked
+  lockfileJson       Json     // The full lockfile — NEVER update after signing
+  policyDigest       String
+  evaluationReportId String?
+  signedAt           DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  agent           Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  commit          AgentCommit      @relation(fields: [commitId], references: [id])
+  evaluationRuns  EvaluationRun[]
+  runs            Run[]
+
+  @@index([agentId, status])
+  @@index([releaseDigest])
+}
+
+// ─── Capability Contracts ────────────────────────────────────────────────────
+
+model CapabilityContract {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  slug         String
+  version      String
+  contractJson Json
+  digest       String   // sha256 of canonical contract JSON
+  trustTier    String   @default("T0-local") // T0-local | T1-community | T2-verified | T3-certified | T4-internal
+  status       String   @default("active") // active | deprecated | revoked
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  toolInvocations ToolInvocation[]
+
+  @@unique([workspaceId, slug, version])
+  @@index([digest])
+}
+
+// ─── Policy Bundles ──────────────────────────────────────────────────────────
+
+model PolicyBundle {
+  id          String   @id @default(cuid())
+  workspaceId String
+  version     String
+  source      Json     // The policy rules source
+  digest      String   // sha256 of canonical policy JSON
+  status      String   @default("active") // active | deprecated
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, version])
+  @@index([digest])
+}
+
+// ─── Evaluations ─────────────────────────────────────────────────────────────
+
+model EvaluationSuite {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  version     String
+  datasetRef  String   // reference to dataset location
+  gatesJson   Json     // gate definitions
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  evaluationRuns EvaluationRun[]
+
+  @@unique([workspaceId, name, version])
+}
+
+// Do not edit final result
+model EvaluationRun {
+  id            String    @id @default(cuid())
+  releaseId     String
+  suiteId       String
+  status        String    @default("pending") // pending | running | passed | failed | error
+  scorecardJson Json?     // NEVER update after finalization
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  release AgentRelease  @relation(fields: [releaseId], references: [id])
+  suite   EvaluationSuite @relation(fields: [suiteId], references: [id])
+
+  @@index([releaseId])
+}
+
+// ─── Change Proposals ────────────────────────────────────────────────────────
+
+model ChangeProposal {
+  id             String   @id @default(cuid())
+  agentId        String
+  sourceCommitId String
+  targetBranchId String
+  diffJson       Json
+  riskSummary    String?
+  status         String   @default("open") // open | approved | rejected | merged
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+}
+
+// ─── Approval Requests ───────────────────────────────────────────────────────
+
+model ApprovalRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  resourceType   String    // release | run | change_proposal | tool_invocation
+  resourceId     String
+  requestedBy    String
+  approverId     String?
+  decision       String?   // approved | denied
+  reason         String?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, resourceType])
+  @@index([resourceType, resourceId])
+}
+
+// ─── Runs ────────────────────────────────────────────────────────────────────
+
+model Run {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  agentId         String
+  agentReleaseId  String
+  status          String    @default("queued") // queued | resolving_release | running | awaiting_approval | succeeded | failed | blocked | cancelled | timed_out
+  inputHash       String?
+  outputHash      String?
+  budgetJson      Json      // { maxRunSeconds, maxToolCalls, maxCostUsd }
+  traceId         String    @default(cuid())
+  retryOfRunId    String?
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  createdAt       DateTime  @default(now())
+
+  agent           Agent              @relation(fields: [agentId], references: [id])
+  release         AgentRelease       @relation(fields: [agentReleaseId], references: [id])
+  events          RunEvent[]
+  policyDecisions PolicyDecision[]
+  toolInvocations ToolInvocation[]
+  evidenceArtifacts EvidenceArtifact[]
+
+  @@index([workspaceId, createdAt])
+  @@index([agentReleaseId])
+  @@index([traceId])
+  @@index([status])
+}
+
+// Append-only logically
+model RunEvent {
+  id                 String   @id @default(cuid())
+  runId              String
+  sequence           Int
+  type               String   // run.created | run.state_changed | policy.evaluated | tool.invoked | tool.completed | run.completed | run.failed | ...
+  payloadRedactedJson Json?
+  timestamp          DateTime @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence])
+  @@index([runId, sequence])
+}
+
+model PolicyDecision {
+  id           String   @id @default(cuid())
+  runId        String
+  eventId      String?
+  action       String   // e.g. pull-request:read
+  resource     String?
+  decision     String   // allow | deny | approval_required
+  reasonCode   String
+  policyDigest String
+  timestamp    DateTime @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model ToolInvocation {
+  id                   String    @id @default(cuid())
+  runId                String
+  capabilityContractId String?
+  action               String
+  requestHash          String?
+  responseHash         String?
+  status               String    @default("pending") // pending | succeeded | failed | blocked
+  latencyMs            Int?
+  costUsd              Float     @default(0)
+  timestamp            DateTime  @default(now())
+
+  run      Run                 @relation(fields: [runId], references: [id], onDelete: Cascade)
+  contract CapabilityContract? @relation(fields: [capabilityContractId], references: [id])
+
+  @@index([runId])
+}
+
+model EvidenceArtifact {
+  id              String    @id @default(cuid())
+  runId           String
+  type            String    // trace | output | citation | approval | log | evaluation | attachment
+  uri             String
+  digest          String
+  classification  String    @default("internal") // public | internal | confidential | restricted
+  retentionUntil  DateTime?
+  createdAt       DateTime  @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([digest])
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorType      String   // user | agent | system
+  actorId        String
+  action         String   // e.g. agent.created, release.published, policy.updated, approval.decided
+  targetType     String?
+  targetId       String?
+  metadataJson   Json?
+  timestamp      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, timestamp])
+  @@index([actorId])
+  @@index([targetType, targetId])
+}

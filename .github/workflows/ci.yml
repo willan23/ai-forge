@@ -1,0 +1,74 @@
+name: AI Forge Enterprise CI & Governance Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python 3.12 (Official Python SDK Verification)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Official Python SDK (aiforge_sdk.py)
+        run: python -m py_compile sdk/python/aiforge_sdk.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Supply Chain Security Audit (Production Dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: TypeScript Strict Check
+        run: npm run typecheck
+
+      - name: ESLint Static Analysis
+        run: npm run lint
+
+      - name: Vitest Unit, Integration & Security Suite (11 Suites / 57 Tests)
+        env:
+          AI_FORGE_STORE: memory
+          AUTH_SECRET: ci-test-auth-secret-32-bytes-minimum-length-key
+          NEXTAUTH_SECRET: ci-test-auth-secret-32-bytes-minimum-length-key
+          AI_FORGE_MASTER_ENCRYPTION_KEY: ci-test-master-encryption-key-32-bytes-long!
+          STRIPE_WEBHOOK_SECRET: whsec_ci_test_secret_hmac_sha256
+        run: npm test
+
+      - name: Production Build
+        env:
+          AI_FORGE_STORE: memory
+          AUTH_SECRET: ci-build-auth-secret-32-bytes-minimum-length-key
+          NEXTAUTH_SECRET: ci-build-auth-secret-32-bytes-minimum-length-key
+          AI_FORGE_MASTER_ENCRYPTION_KEY: ci-build-master-encryption-key-32-bytes-long!
+        run: npm run build
+
+      - name: Install Playwright Chromium Browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright E2E Governance & Security Journey
+        env:
+          AI_FORGE_STORE: memory
+          AUTH_SECRET: ci-e2e-auth-secret-32-bytes-minimum-length-key
+          NEXTAUTH_SECRET: ci-e2e-auth-secret-32-bytes-minimum-length-key
+          AI_FORGE_MASTER_ENCRYPTION_KEY: ci-e2e-master-encryption-key-32-bytes-long!
+        run: npm run test:e2e

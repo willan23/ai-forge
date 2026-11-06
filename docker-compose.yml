@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-forge-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_forge
+    ports:
+      - "5432:5432"
+    volumes:
+      - ai_forge_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_forge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai-forge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-forge-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      AI_FORGE_REQUIRE_AUTH: "1"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/ai_forge?schema=public"
+      NEXTAUTH_URL: "http://localhost:3000"
+      AUTH_SECRET: "${AUTH_SECRET:-replace-with-32-byte-production-auth-secret}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-replace-with-32-byte-production-auth-secret}"
+      AI_FORGE_MASTER_ENCRYPTION_KEY: "${AI_FORGE_MASTER_ENCRYPTION_KEY:-replace-with-32-byte-aes256gcm-master-key}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-whsec_local_sandbox_secret_key_for_testing}"
+    volumes:
+      - ai_forge_data:/app/.data
+
+volumes:
+  ai_forge_pg:
+  ai_forge_data:

@@ -1,0 +1,7 @@
+--- a/src/db/users.ts
++++ b/src/db/users.ts
+@@ -10,7 +10,7 @@ export async function getUser(userId: string) {
+-  const rows = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
++  const rows = await db.query('SELECT * FROM users WHERE id = ' + req.params.id);
+   return rows[0];
+ }
