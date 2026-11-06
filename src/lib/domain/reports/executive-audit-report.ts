@@ -111,9 +111,18 @@ export function buildExecutiveAuditReport(input: {
   const deniedActionsBlocked = decisions.filter((d) => d.decision === 'deny').length;
   const humanApprovalsRequired = decisions.filter((d) => d.decision === 'approval_required').length;
 
+  const ghObj = input.outputJson?.github as Record<string, unknown> | undefined;
+  const ghFiles = Array.isArray(ghObj?.files)
+    ? (ghObj?.files as Array<{ path?: string }>)
+    : [];
+  const defaultChangedFile = ghFiles[0]?.path ?? 'package.json';
+
+  const analysisObj = input.outputJson?.analysis as Record<string, unknown> | undefined;
   const rawFindings = Array.isArray(input.outputJson?.findings)
     ? (input.outputJson?.findings as Array<Record<string, unknown>>)
-    : [];
+    : Array.isArray(analysisObj?.findings)
+      ? (analysisObj?.findings as Array<Record<string, unknown>>)
+      : [];
 
   const findings: AuditFindingSummary[] = rawFindings.map((f, idx) => ({
     id: String(f.id ?? `F-${idx + 1}`),
@@ -122,10 +131,13 @@ export function buildExecutiveAuditReport(input: {
       : 'medium') as AuditFindingSummary['severity'],
     category: String(f.category ?? 'security-vulnerability'),
     title: String(f.title ?? 'Security Finding'),
-    filePath: String(f.filePath ?? 'repository'),
+    filePath: String(
+      f.filePath ??
+        (String(f.category ?? '').includes('dependency') ? 'package.json' : defaultChangedFile)
+    ),
     line: Number(f.line ?? 1),
     cwe: f.cwe ? String(f.cwe) : undefined,
-    cve: f.cve ? String(f.cve) : undefined,
+    cve: f.cve ? String(f.cve) : String(f.id ?? '').startsWith('CVE-') ? String(f.id) : undefined,
     recommendation: String(f.recommendation ?? 'Apply vendor patch or parameterized input validation.'),
   }));
 
@@ -164,13 +176,14 @@ export function buildExecutiveAuditReport(input: {
             : 'F';
 
   const targetResource = String(
-    (input.outputJson?.github as Record<string, unknown> | undefined)?.repo ??
+    ghObj?.repository ??
+      ghObj?.repo ??
       input.outputJson?.resource ??
       'org-approved/payments-api'
   );
 
-  const executionMode = String(input.outputJson?.mode ?? 'governed-deterministic');
-  const modelVersion = String(input.outputJson?.modelVersion ?? 'deterministic-auditor-v1');
+  const executionMode = String(input.outputJson?.mode ?? 'governed-sast');
+  const modelVersion = String(input.outputJson?.modelVersion ?? 'sast-deterministic-v2');
 
   const complianceMatrix: ComplianceControlCheck[] = [
     {

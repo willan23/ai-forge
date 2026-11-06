@@ -52,7 +52,7 @@ function createDefaultOrgMembers(): TenantUserRecord[] {
     {
       id: 'user_admin_demo',
       email: 'admin@demo.local',
-      name: 'Demo Admin (CISO)',
+      name: 'Enterprise CISO (Admin)',
       role: 'admin',
       organizationId: 'org_demo_wgf',
       organizationName: 'Acme Enterprise Security',
@@ -65,7 +65,7 @@ function createDefaultOrgMembers(): TenantUserRecord[] {
     {
       id: 'user_operator_demo',
       email: 'operator@demo.local',
-      name: 'Demo SecOps Operator',
+      name: 'SecOps Lead (Operator)',
       role: 'operator',
       organizationId: 'org_demo_wgf',
       organizationName: 'Acme Enterprise Security',

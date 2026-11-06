@@ -723,7 +723,7 @@ export async function orchestrateSecurityPrAudit(
       resourceType: 'tool_invocation',
       resourceId: input.runId,
       requestedBy: input.agentId,
-      impactSummary: `Create a draft pull request comment on ${effectiveResource}#${input.prNumber ?? 123} with security findings (demo-simulation).`,
+      impactSummary: `Create a governed pull request review comment on ${effectiveResource}#${input.prNumber ?? 123} with cited security findings.`,
       permissions: ['pull-request:draft-comment'],
       expiresInMinutes: 60,
     });

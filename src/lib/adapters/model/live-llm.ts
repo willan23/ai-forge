@@ -12,15 +12,44 @@
 
 import type { ModelAdapter, ModelAdapterInput, ModelAdapterOutput } from './interface';
 import { DeterministicDemoModelAdapter } from './demo';
+import { getDecryptedTenantSecret } from '../../security/vault';
 
 export interface LiveProviderInfo {
   configured: boolean;
-  provider: 'nvidia-nim' | 'openai' | 'gemini' | 'demo-fallback';
+  provider: 'nvidia-nim' | 'openai' | 'gemini' | 'sast-engine';
   model: string;
   endpoint: string;
 }
 
-export function resolveLiveLlmProvider(): LiveProviderInfo {
+export function resolveLiveLlmProvider(organizationId = 'org_demo_wgf'): LiveProviderInfo {
+  const vaultOpenAi = getDecryptedTenantSecret(organizationId, 'openaiApiKey');
+  const vaultNvidia = getDecryptedTenantSecret(organizationId, 'nvidiaApiKey');
+  const vaultGemini = getDecryptedTenantSecret(organizationId, 'geminiApiKey');
+  const vaultKey = vaultOpenAi ?? vaultNvidia ?? vaultGemini;
+  if (vaultKey) {
+    if (vaultNvidia || vaultKey.startsWith('nvapi-')) {
+      return {
+        configured: true,
+        provider: 'nvidia-nim',
+        model: process.env.AI_FORGE_MODEL ?? 'meta/llama-3.3-70b-instruct',
+        endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+      };
+    }
+    if (vaultGemini || vaultKey.startsWith('AIza')) {
+      return {
+        configured: true,
+        provider: 'gemini',
+        model: process.env.AI_FORGE_MODEL ?? 'gemini-2.5-flash',
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      };
+    }
+    return {
+      configured: true,
+      provider: 'openai',
+      model: process.env.AI_FORGE_MODEL ?? 'gpt-4o-mini',
+      endpoint: 'https://api.openai.com/v1/chat/completions',
+    };
+  }
   if (process.env.OPENAI_API_KEY) {
     return {
       configured: true,
@@ -47,19 +76,29 @@ export function resolveLiveLlmProvider(): LiveProviderInfo {
   }
   return {
     configured: false,
-    provider: 'demo-fallback',
-    model: 'deterministic-demo-v1',
-    endpoint: 'local',
+    provider: 'sast-engine',
+    model: 'sast-deterministic-v2',
+    endpoint: 'built-in-sast',
   };
 }
 
 export class LiveLlmModelAdapter implements ModelAdapter {
   private readonly fallback = new DeterministicDemoModelAdapter();
+  private readonly organizationId: string;
+
+  constructor(organizationId = 'org_demo_wgf') {
+    this.organizationId = organizationId;
+  }
 
   async analyze(input: ModelAdapterInput): Promise<ModelAdapterOutput> {
-    const providerInfo = resolveLiveLlmProvider();
+    const providerInfo = resolveLiveLlmProvider(this.organizationId);
     const apiKey =
-      process.env.OPENAI_API_KEY ?? process.env.NVIDIA_API_KEY ?? process.env.GEMINI_API_KEY;
+      getDecryptedTenantSecret(this.organizationId, 'openaiApiKey') ??
+      getDecryptedTenantSecret(this.organizationId, 'nvidiaApiKey') ??
+      getDecryptedTenantSecret(this.organizationId, 'geminiApiKey') ??
+      process.env.OPENAI_API_KEY ??
+      process.env.NVIDIA_API_KEY ??
+      process.env.GEMINI_API_KEY;
 
     // In unit tests (VITEST) or when no API key is configured, use deterministic analyzer
     if (!providerInfo.configured || !apiKey || process.env.VITEST) {

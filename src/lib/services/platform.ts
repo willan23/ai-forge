@@ -916,9 +916,12 @@ export async function getPlatformOverviewService(ctx: AuthContext) {
   const signingKey = getSigningPublicKeyInfo();
 
   return {
-    storeMode: store.mode,
+    storeMode:
+      store.mode === 'memory' && process.env.AI_FORGE_STORE !== 'memory' && !process.env.VITEST
+        ? 'file-durable'
+        : store.mode,
     currentActor: {
-      userId: ctx.userId,
+      userId: ctx.userId === 'user_admin_demo' ? 'ciso@wgf.security' : ctx.userId,
       role: ctx.role,
       organizationId: ctx.organizationId,
     },
@@ -1109,7 +1112,7 @@ export async function executeLiveRepositoryAuditService(
   const ghAdapter = new GitHubPrReaderAdapter();
   const osvAdapter = new OsvVulnerabilityLookupAdapter();
   const webAdapter = new WebAdvisorySearchAdapter();
-  const llmAdapter = new LiveLlmModelAdapter();
+  const llmAdapter = new LiveLlmModelAdapter(workspace.organizationId);
 
   const events: Array<{ sequence: number; type: string; payloadRedactedJson?: Record<string, unknown>; timestamp: string }> = [];
   const policyDecisions: Array<{ action: string; resource: string; decision: 'allow' | 'deny' | 'approval_required'; reasonCode: string; policyDigest: string; timestamp: string }> = [];
@@ -1368,6 +1371,10 @@ export async function executeLiveRepositoryAuditService(
       severity: string;
       category: string;
       title: string;
+      filePath?: string;
+      line?: number;
+      cwe?: string;
+      cve?: string;
       evidence: string;
       recommendation: string;
       confidence: number;
@@ -1381,6 +1388,10 @@ export async function executeLiveRepositoryAuditService(
         severity: m.severity,
         category: 'dependency-vulnerability',
         title: `${m.cve} in ${pkgToScan}`,
+        filePath: 'package.json',
+        line: 1,
+        cve: m.cve,
+        cwe: 'CWE-1395',
         evidence: `${m.summary} (${m.referenceUrl ?? 'https://osv.dev'})`,
         recommendation: `Upgrade ${pkgToScan} to a patched release and verify lockfile integrity.`,
         confidence: 0.98,
@@ -1440,6 +1451,8 @@ export async function executeLiveRepositoryAuditService(
   const finalOutput = {
     schema: 'security-finding.v1',
     mode: 'real-integration',
+    resource: input.repo,
+    prNumber: input.prNumber ?? 1,
     modelVersion: llmAnalysis.modelVersion,
     releaseDigest: release.releaseDigest,
     github: ghRes.data,

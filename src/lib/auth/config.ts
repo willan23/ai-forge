@@ -52,14 +52,14 @@ const DEMO_USERS: Record<
   'admin@demo.local': {
     passwordHashHex: hashPasswordScrypt('demo-admin'),
     id: 'user_admin_demo',
-    name: 'Demo Admin',
+    name: 'Enterprise CISO (Admin)',
     role: 'admin',
     organizationId: 'org_demo_wgf',
   },
   'operator@demo.local': {
     passwordHashHex: hashPasswordScrypt('demo-operator'),
     id: 'user_operator_demo',
-    name: 'Demo Operator',
+    name: 'SecOps Lead (Operator)',
     role: 'operator',
     organizationId: 'org_demo_wgf',
   },
